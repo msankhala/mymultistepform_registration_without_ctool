@@ -1,0 +1,10 @@
+name = mymultistepform registration without ctools
+description = my simple multistep form using <strong> without ctools wizard </strong>. User registration multistep form.
+package = Custom
+version = VERSION
+core = 7.x
+dependencies[] = ctools
+
+
+
+

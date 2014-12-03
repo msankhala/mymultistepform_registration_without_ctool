@@ -1,0 +1,230 @@
+<?php
+
+/**
+* Implements hook_menu_alter().
+*/
+function mymultistepform_registration_without_ctool_menu_alter(&$items) {
+  $items['user/register']['page arguments'] = array('mymultistepform_registration_without_ctool_wizard');
+  return $items;
+}
+
+function _mymultistepform_registration_without_ctool_steps() {
+  return array(
+      1 => array(
+        'form' => 'user_register_form',
+      ),
+      2 => array(
+        'form' => 'mymultistepform_registration_without_ctool_group_info',
+      ),
+    );
+}
+
+function mymultistepform_registration_without_ctool_wizard($form, &$form_state) {
+// Initialize a description of the steps for the wizard.
+  if (empty($form_state['step'])) {
+    $form_state['step'] = 1;   
+  // This array contains the function to be called at each step to get the
+  // relevant form elements. It will also store state information for each
+  // step.
+    $form_state['step_information'] = _mymultistepform_registration_without_ctool_steps();
+  }
+  $step = &$form_state['step'];
+  drupal_set_title(t('Create Account: Step @step', array('@step' => $step)));
+
+  // Call the function named in $form_state['step_information'] to get the
+  // form elements to display for this step.
+  $form = $form_state['step_information'][$step]['form']($form, $form_state);
+
+ // Show the 'previous' button if appropriate. Note that #submit is set to
+  // a special submit handler, and that we use #limit_validation_errors to
+  // skip all complaints about validation when using the back button. The
+  // values entered will be discarded, but they will not be validated, which
+  // would be annoying in a "back" button.
+  if ($step > 1) {
+    $form['prev'] = array(
+      '#type' => 'submit',
+      '#value' => t('Previous'),
+      '#name' => 'prev',
+      '#submit' => array('mymultistepform_registration_without_ctool_wizard_previous_submit'),
+      '#limit_validation_errors' => array(),
+    );
+  }
+
+ 
+// Show the Next button only if there are more steps defined.
+  if ($step < count($form_state['step_information'])) {
+    // The Next button should be included on every step
+    $form['next'] = array(
+      '#type' => 'submit',
+      '#value' => t('Next'),
+      '#name' => 'next',
+      '#submit' => array('mymultistepform_registration_without_ctool_wizard_next_submit'),
+    );
+  }
+  else {
+    // Just in case there are no more steps, we use the default submit handler
+    // of the form wizard. When this button is clicked, the
+    // mymultistepform_registration_without_ctool_wizard_submit handler will be called.
+    $form['finish'] = array(
+      '#type' => 'submit',
+      '#value' => t('Finish'),
+    );
+  }
+
+ 
+$form['next']['#validate'] = array(); 
+  // Include each validation function defined for the different steps.
+  // First, look for functions that match the form_id_validate naming convention.
+  if (function_exists($form_state['step_information'][$step]['form'] . '_validate')) {
+    $form['next']['#validate'] = array($form_state['step_information'][$step]['form'] . '_validate');
+  }
+  // Next, merge in any other validate functions defined by child form.
+  if (isset($form['#validate'])) {
+    $form['next']['#validate'] = array_merge($form['next']['#validate'], $form['#validate']);
+    unset($form['#validate']);
+  }
+
+ 
+// Let's do the same thing for #submit handlers.
+  // First, look for functions that match the form_id_submit naming convention.
+  if (function_exists($form_state['step_information'][$step]['form'] . '_submit')) {
+    $form['next']['#submit'] = array_merge($form_state['step_information'][$step]['form'] . '_submit', $form['next']['#submit']);
+  }
+  // Next, merge in any other submit functions defined by child form.
+  if (isset($form['#submit'])) {
+    // It's important to merge in the form-specific handlers first, before
+    // mymultistepform_registration_without_ctool_wizard_next_submit clears $form_state['values].
+    $form['next']['#submit'] = array_merge($form['#submit'], $form['next']['#submit']);
+    unset($form['#submit']);
+  }
+
+  return $form;
+}
+
+/**
+* Submit handler for the "previous" button.
+* - Stores away $form_state['values']
+* - Decrements the step counter
+* - Replaces $form_state['values'] with the values from the previous state.
+* - Forces form rebuild.
+*
+* You are not required to change this function.
+*
+* @ingroup form_example
+*/
+function mymultistepform_registration_without_ctool_wizard_previous_submit($form, &$form_state) {
+  $current_step = &$form_state['step'];
+  $form_state['step_information'][$current_step]['stored_values'] = $form_state['values'];
+  if ($current_step > 1) {
+    $current_step--;
+    $form_state['values'] = $form_state['step_information'][$current_step]['stored_values'];
+  }
+  $form_state['rebuild'] = TRUE;
+}
+
+/**
+* Submit handler for the 'next' button.
+* - Saves away $form_state['values']
+* - Increments the step count.
+* - Replace $form_state['values'] from the last time we were at this page
+*   or with array() if we haven't been here before.
+* - Force form rebuild.
+*
+* You are not required to change this function.
+*
+* @param $form
+* @param $form_state
+*
+* @ingroup form_example
+*/
+function mymultistepform_registration_without_ctool_wizard_next_submit($form, &$form_state) {
+  $current_step = &$form_state['step'];
+  $form_state['step_information'][$current_step]['stored_values'] = $form_state['values'];
+
+  if (
+$current_step < count($form_state['step_information'])) {
+    $current_step++;
+    if (!empty($form_state['step_information'][$current_step]['stored_values'])) {
+      $form_state['values'] = $form_state['step_information'][$current_step]['stored_values'];
+    }
+    else {
+      $form_state['values'] = array();
+    }
+    $form_state['rebuild'] = TRUE;  // Force rebuild with next step.
+    return;
+  }
+}
+
+function mymultistepform_registration_without_ctool_form_alter(&$form, &$form_state, $form_id) {
+  if ($form_id == 'mymultistepform_registration_without_ctool_wizard' && $form_state['step'] == 1) {
+    // Clean up the form a bit by removing 'create new account' submit button
+    // and moving 'next' button to bottom of form.
+    unset($form['actions']);
+    $form['next']['#weight'] = 100;
+  }
+}
+
+/**
+* Build form elements for step 2.
+*/
+function mymultistepform_registration_without_ctool_group_info(&$form, &$form_state)  { 
+  $form['create-group'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Create a new community.'),
+  );
+   
+  // Allow users to create a new organic group upon registration.
+  $form['create-group']['group-name'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Community name'),
+    '#description' => t('Please enter the name of the group that you would like to create.'),
+    '#required' => TRUE,
+    '#weight' => -40,
+  );
+
+   
+  $form['#validate'][] = 'mymultistepform_registration_without_ctool_validate_og';
+  $form['#submit'][] = 'mymultistepform_registration_without_ctool_new_og';
+  return $form;
+}
+
+// And now comes the magic of the wizard, the function that should handle all the
+// inputs from the user on each different step.
+/**
+* Wizard form submit handler.
+* - Saves away $form_state['values']
+* - Process all the form values.
+*
+* This demonstration handler just do a drupal_set_message() with the information
+* collected on each different step of the wizard.
+*
+* @param $form
+* @param $form_state
+*
+* @ingroup form_example
+*/
+function mymultistepform_registration_without_ctool_wizard_submit($form, &$form_state) {
+  $current_step = &$form_state['step'];
+  $form_state['step_information'][$current_step]['stored_values'] = $form_state['values'];
+
+ 
+  // In this case we've completed the final page of the wizard, so process the
+  // submitted information.
+  drupal_set_message(t('This information was collected by this wizard:'));
+  foreach ($form_state['step_information'] as $index => $value) {
+    // Remove FAPI fields included in the values (form_token, form_id and form_build_id
+    // This is not required, you may access the values using $value['stored_values']
+    // but I'm removing them to make a more clear representation of the collected
+    // information as the complete array will be passed through drupal_set_message().
+    unset($value['stored_values']['form_id']);
+    unset($value['stored_values']['form_build_id']);
+    unset($value['stored_values']['form_token']);
+
+   
+// Now show all the values.
+    drupal_set_message(t('Step @num collected the following values: <pre>@result</pre>', array('@num' => $index, '@result' => print_r($value['stored_values'], TRUE))));
+  }
+  // Redirect the new user to their user page.
+  $user = user_load($form_state['uid']);
+  drupal_goto('user/' . $user->uid);
+}
